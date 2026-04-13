@@ -1,0 +1,8 @@
+export const CPU_WARNING_THRESHOLD = 75;
+export const CPU_CRITICAL_THRESHOLD = 90;
+export const RAM_WARNING_THRESHOLD = 80;
+export const RAM_CRITICAL_THRESHOLD = 90;
+export const DISK_WARNING_THRESHOLD = 80;
+export const DISK_CRITICAL_THRESHOLD = 90;
+export const SWAP_WARNING_PERCENT = 50;
+export const LOAD_PER_CORE_MULTIPLIER = 1.5;
