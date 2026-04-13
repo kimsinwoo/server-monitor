@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import { parse as parseDotenv } from 'dotenv';
 import type {
   DatabaseConfig,
   HttpEndpointConfig,
@@ -93,6 +95,58 @@ function buildHubDerivedHttpEndpoints(serverId: string): HttpEndpointConfig[] {
   return out;
 }
 
+/** hub_project/back/.env 경로 — monitor 쪽 키가 비어 있을 때만 채움 (MQTT·DB) */
+function mergeHubBackEnvFile(): void {
+  const p = process.env.MONITOR_HUB_ENV_PATH?.trim();
+  if (!p || !fs.existsSync(p)) return;
+  try {
+    const parsed = parseDotenv(fs.readFileSync(p, 'utf8'));
+    const keys = [
+      'MQTT_BROKER_URL',
+      'MQTT_USERNAME',
+      'MQTT_PASSWORD',
+      'DB_HOST',
+      'DB_PORT',
+      'DB_USERNAME',
+      'DB_PASSWORD',
+      'DB_DATABASE',
+    ] as const;
+    for (const k of keys) {
+      const v = parsed[k];
+      if (v !== undefined && v !== '' && !String(process.env[k] ?? '').trim()) {
+        process.env[k] = v;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 허브 인메모리 텔레메트리 큐 — GET /api/monitor/queue-metrics */
+function buildHubTelemetryQueueFromEnv(serverId: string): MonitorConfig['queues'] {
+  if (process.env.MONITOR_HUB_TELEMETRY_QUEUE === 'false') return [];
+  const explicit = process.env.MONITOR_HUB_QUEUE_METRICS_URL?.trim();
+  const internal = process.env.MONITOR_HUB_INTERNAL_API_ORIGIN?.trim();
+  const api = process.env.MONITOR_HUB_API_ORIGIN?.trim();
+  const site = process.env.MONITOR_HUB_SITE_ORIGIN?.trim();
+  const base = internal || api || site;
+  const url =
+    explicit || (base ? `${trimTrailingSlash(base)}/api/monitor/queue-metrics` : '');
+  if (!url) return [];
+  return [
+    {
+      serverId,
+      type: 'hub-telemetry',
+      queueDepthThreshold: envInt('MONITOR_TELEMETRY_QUEUE_WARNING', 500),
+      connection: {
+        url,
+        token: process.env.MONITOR_INTERNAL_TOKEN ?? '',
+        criticalDepth: envInt('MONITOR_TELEMETRY_QUEUE_CRITICAL', 5000),
+      },
+    },
+  ];
+}
+
 /** hub_project/back/.env 와 동일 키를 monitor/.env 에 넣었을 때 MQTT 점검 자동 구성 */
 function buildMqttFromHubEnv(serverId: string): MqttBrokerConfig[] {
   const url = process.env.MQTT_BROKER_URL?.trim();
@@ -142,6 +196,8 @@ function mergeHttpEndpoints(
 }
 
 export function loadMonitorConfig(): MonitorConfig {
+  mergeHubBackEnvFile();
+
   const serversFromEnv = parseJson(process.env.MONITOR_SERVERS, [] as ServerConfig[]);
   const servers: ServerConfig[] =
     serversFromEnv.length > 0
@@ -182,7 +238,8 @@ export function loadMonitorConfig(): MonitorConfig {
     [] as MonitorConfig['redis']['instances'],
   );
 
-  const queues = parseJson(process.env.MONITOR_QUEUES, [] as MonitorConfig['queues']);
+  const queuesParsed = parseJson(process.env.MONITOR_QUEUES, [] as MonitorConfig['queues']);
+  const queues = [...buildHubTelemetryQueueFromEnv(serverId), ...queuesParsed];
 
   const dnsChecks = parseJson(
     process.env.MONITOR_DNS_CHECKS,

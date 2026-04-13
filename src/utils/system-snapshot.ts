@@ -15,9 +15,14 @@ export async function captureSystemSnapshot(): Promise<SystemSnapshot> {
     si.networkStats(),
   ]);
 
-  const ramTotalMB = mem.total / (1024 * 1024);
-  const ramUsedMB = mem.used / (1024 * 1024);
-  const ramUsedPercent = mem.total > 0 ? (mem.used / mem.total) * 100 : 0;
+  // Linux: mem.used 는 캐시 포함으로 대시보드(50%대)와 다르게 90%대로 보일 수 있음.
+  // MemAvailable 기준 = total - available (free 명령·대부분 호스팅 패널과 유사)
+  const total = mem.total;
+  const available = typeof mem.available === 'number' && mem.available >= 0 ? mem.available : mem.free;
+  const usedExclApprox = Math.max(0, total - available);
+  const ramTotalMB = total / (1024 * 1024);
+  const ramUsedMB = usedExclApprox / (1024 * 1024);
+  const ramUsedPercent = total > 0 ? (usedExclApprox / total) * 100 : 0;
 
   const rootFs = fsSize[0];
   const diskTotalGB = rootFs ? rootFs.size / (1024 * 1024 * 1024) : 0;

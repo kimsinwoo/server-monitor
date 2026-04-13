@@ -8,45 +8,69 @@ import { startCronSchedulers } from './scheduler/cron.scheduler.js';
 import { logger } from './utils/logger.js';
 import { SystemCollector } from './collectors/system.collector.js';
 import { HttpCollector } from './collectors/http.collector.js';
-import { MqttCollector } from './collectors/mqtt.collector.js';
-import { Pm2Collector } from './collectors/pm2.collector.js';
-import { DatabaseCollector } from './collectors/database.collector.js';
-import { DockerCollector } from './collectors/docker.collector.js';
-import { SslCollector } from './collectors/ssl.collector.js';
-import { DnsCollector } from './collectors/dns.collector.js';
-import { LogCollector } from './collectors/log.collector.js';
-import { RedisCollector } from './collectors/redis.collector.js';
-import { QueueCollector } from './collectors/queue.collector.js';
-import { FrontendCollector } from './collectors/frontend.collector.js';
 import type { BaseCollector } from './collectors/base.collector.js';
 import type { MonitorConfig } from './types/monitor.types.js';
-import { sendStartupReportIfConfigured } from './startup/startup-notify.js';
 
-function createCollectors(cfg: MonitorConfig): BaseCollector[] {
-  return [
-    new SystemCollector(cfg),
-    new HttpCollector(cfg),
-    new MqttCollector(cfg),
-    new Pm2Collector(cfg),
-    new DatabaseCollector(cfg),
-    new DockerCollector(cfg),
-    new SslCollector(cfg),
-    new DnsCollector(cfg),
-    new LogCollector(cfg),
-    new RedisCollector(cfg),
-    new QueueCollector(cfg),
-    new FrontendCollector(cfg),
-  ];
+/**
+ * 설정에 실제로 쓰는 수집기만 동적 import → 미사용 패키지(mqtt, ioredis, pm2, dockerode 등) 로드 생략으로 RSS 절감.
+ */
+async function createCollectors(cfg: MonitorConfig): Promise<BaseCollector[]> {
+  const list: BaseCollector[] = [];
+  list.push(new SystemCollector(cfg));
+  list.push(new HttpCollector(cfg));
+
+  if (cfg.mqtt.brokers.length > 0) {
+    const { MqttCollector } = await import('./collectors/mqtt.collector.js');
+    list.push(new MqttCollector(cfg));
+  }
+  if (cfg.pm2.enabled) {
+    const { Pm2Collector } = await import('./collectors/pm2.collector.js');
+    list.push(new Pm2Collector(cfg));
+  }
+  if (cfg.databases.length > 0) {
+    const { DatabaseCollector } = await import('./collectors/database.collector.js');
+    list.push(new DatabaseCollector(cfg));
+  }
+  if (cfg.docker.enabled) {
+    const { DockerCollector } = await import('./collectors/docker.collector.js');
+    list.push(new DockerCollector(cfg));
+  }
+  if (cfg.ssl.domains.length > 0) {
+    const { SslCollector } = await import('./collectors/ssl.collector.js');
+    list.push(new SslCollector(cfg));
+  }
+  if (cfg.dns.checks.length > 0) {
+    const { DnsCollector } = await import('./collectors/dns.collector.js');
+    list.push(new DnsCollector(cfg));
+  }
+  if (cfg.logs.files.length > 0) {
+    const { LogCollector } = await import('./collectors/log.collector.js');
+    list.push(new LogCollector(cfg));
+  }
+  if (cfg.redis.instances.length > 0) {
+    const { RedisCollector } = await import('./collectors/redis.collector.js');
+    list.push(new RedisCollector(cfg));
+  }
+  if (cfg.queues.length > 0) {
+    const { QueueCollector } = await import('./collectors/queue.collector.js');
+    list.push(new QueueCollector(cfg));
+  }
+  if (cfg.frontend.buildDir || cfg.frontend.healthUrls.length > 0) {
+    const { FrontendCollector } = await import('./collectors/frontend.collector.js');
+    list.push(new FrontendCollector(cfg));
+  }
+
+  return list;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const config = loadMonitorConfig();
   const store = new EventStore(config.store);
   const aggregator = new EventAggregator(store);
   const reportBuilder = new ReportBuilder();
   const emailSender = createEmailSender(config.email);
 
-  const collectors = createCollectors(config);
+  const collectors = await createCollectors(config);
   for (const c of collectors) {
     const tick = () => {
       void aggregator.runCollector(c);
@@ -63,9 +87,11 @@ function main(): void {
   });
 
   setImmediate(() => {
-    void sendStartupReportIfConfigured({ config, store, emailSender }).catch((e) =>
-      logger.error('startup report error', { error: String(e) }),
-    );
+    void import('./startup/startup-notify.js')
+      .then(({ sendStartupReportIfConfigured }) =>
+        sendStartupReportIfConfigured({ config, store, emailSender }),
+      )
+      .catch((e) => logger.error('startup report error', { error: String(e) }));
   });
 
   const shutdown = () => {
@@ -76,4 +102,7 @@ function main(): void {
   process.on('SIGTERM', shutdown);
 }
 
-main();
+main().catch((e) => {
+  logger.error('fatal', { error: String(e) });
+  process.exit(1);
+});

@@ -10,6 +10,7 @@ describe('loadMonitorConfig — 실서버(허브) 오리진 병합', () => {
     vi.stubEnv('MONITOR_SERVER_ID', 'hub-prod');
     vi.stubEnv('MONITOR_HUB_SITE_ORIGIN', 'http://example.com');
     vi.stubEnv('MONITOR_HUB_API_ORIGIN', 'http://127.0.0.1:5001');
+    vi.stubEnv('MONITOR_HUB_TELEMETRY_QUEUE', 'false');
     vi.stubEnv('MQTT_BROKER_URL', '');
     vi.stubEnv('DB_HOST', '');
     const c = loadMonitorConfig();
@@ -23,6 +24,7 @@ describe('loadMonitorConfig — 실서버(허브) 오리진 병합', () => {
   it('MONITOR_HUB_API_ORIGIN 이 비어 있으면 SITE 와 같은 호스트로 /api/health', () => {
     vi.stubEnv('MONITOR_SERVER_ID', 'hub-1');
     vi.stubEnv('MONITOR_HUB_SITE_ORIGIN', 'https://creamoff.example');
+    vi.stubEnv('MONITOR_HUB_TELEMETRY_QUEUE', 'false');
     vi.stubEnv('MQTT_BROKER_URL', '');
     vi.stubEnv('DB_HOST', '');
     const c = loadMonitorConfig();
@@ -31,6 +33,7 @@ describe('loadMonitorConfig — 실서버(허브) 오리진 병합', () => {
   });
 
   it('MONITOR_HTTP_ENDPOINTS 가 동일 URL이면 허브 기본값을 덮어쓴다', () => {
+    vi.stubEnv('MONITOR_HUB_TELEMETRY_QUEUE', 'false');
     vi.stubEnv('MQTT_BROKER_URL', '');
     vi.stubEnv('DB_HOST', '');
     vi.stubEnv('MONITOR_HUB_API_ORIGIN', 'http://127.0.0.1:5001');

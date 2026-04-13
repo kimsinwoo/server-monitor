@@ -5,9 +5,6 @@ import { createRequire } from 'node:module';
 import tls from 'node:tls';
 import dns from 'node:dns/promises';
 import axios from 'axios';
-import mqtt from 'mqtt';
-import nodemailer from 'nodemailer';
-import { Redis } from 'ioredis';
 import type { MonitorConfig } from '../types/monitor.types.js';
 import type { EmailSender } from '../types/monitor.types.js';
 import type { EventStore } from '../aggregator/event.store.js';
@@ -135,14 +132,16 @@ export async function runStartupAudit(config: MonitorConfig, store: EventStore):
     push(checks, 'docker', 'Docker', true, '비활성');
   }
 
+  const mqttLib = config.mqtt.brokers.length > 0 ? (await import('mqtt')).default : null;
   for (let i = 0; i < config.mqtt.brokers.length; i++) {
     const b = config.mqtt.brokers[i]!;
     const tag = `mqtt-${i}`;
     try {
+      if (!mqttLib) break;
       const clientId = b.clientId ?? `monitor-startup-${Date.now()}`;
       const timeoutMs = Math.min(b.heartbeatTimeoutMs ?? 8000, 8000);
       await new Promise<void>((resolve, reject) => {
-        const client = mqtt.connect(b.url, {
+        const client = mqttLib.connect(b.url, {
           clientId,
           username: b.username,
           password: b.password,
@@ -172,30 +171,32 @@ export async function runStartupAudit(config: MonitorConfig, store: EventStore):
     push(checks, 'mqtt-none', 'MQTT', true, '브로커 설정 없음');
   }
 
-  for (let i = 0; i < config.redis.instances.length; i++) {
-    const inst = config.redis.instances[i]!;
-    const tag = `redis-${i}`;
-    const client = new Redis({
-      host: inst.host,
-      port: inst.port ?? 6379,
-      password: inst.password,
-      maxRetriesPerRequest: 1,
-      connectTimeout: 5000,
-    });
-    try {
-      await withTimeout(client.ping(), 6000, tag);
-      await client.quit();
-      push(checks, tag, `Redis ${inst.host}`, true, 'PING OK');
-    } catch (e) {
+  if (config.redis.instances.length > 0) {
+    const { Redis } = await import('ioredis');
+    for (let i = 0; i < config.redis.instances.length; i++) {
+      const inst = config.redis.instances[i]!;
+      const tag = `redis-${i}`;
+      const client = new Redis({
+        host: inst.host,
+        port: inst.port ?? 6379,
+        password: inst.password,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 5000,
+      });
       try {
-        client.disconnect();
-      } catch {
-        /* ignore */
+        await withTimeout(client.ping(), 6000, tag);
+        await client.quit();
+        push(checks, tag, `Redis ${inst.host}`, true, 'PING OK');
+      } catch (e) {
+        try {
+          client.disconnect();
+        } catch {
+          /* ignore */
+        }
+        push(checks, tag, `Redis ${inst.host}`, false, e instanceof Error ? e.message : String(e));
       }
-      push(checks, tag, `Redis ${inst.host}`, false, e instanceof Error ? e.message : String(e));
     }
-  }
-  if (config.redis.instances.length === 0) {
+  } else {
     push(checks, 'redis-none', 'Redis', true, '인스턴스 설정 없음');
   }
 
@@ -350,11 +351,50 @@ export async function runStartupAudit(config: MonitorConfig, store: EventStore):
     }
   }
 
-  push(checks, 'queue', '메시지 큐 수집기', true, '스텁(설정만 반영, 큐별 미구현)');
+  const hubTelemetryQueues = config.queues.filter((q) => q.type === 'hub-telemetry');
+  if (hubTelemetryQueues.length === 0) {
+    push(checks, 'queue', '메시지 큐(허브 텔레메트리)', true, 'hub-telemetry 미구성 · MONITOR_HUB_* 또는 MONITOR_HUB_QUEUE_METRICS_URL');
+  } else {
+    for (let i = 0; i < hubTelemetryQueues.length; i++) {
+      const q = hubTelemetryQueues[i]!;
+      const c = q.connection as { url?: string; token?: string };
+      const tag = `queue-hub-${i}`;
+      if (!c?.url) {
+        push(checks, tag, '허브 텔레메트리 큐', false, 'connection.url 없음');
+        continue;
+      }
+      try {
+        const headers: Record<string, string> = {};
+        if (c.token) headers['X-Monitor-Token'] = c.token;
+        const res = await withTimeout(
+          axios.get(c.url, { timeout: 8000, validateStatus: () => true, headers }),
+          10_000,
+          tag,
+        );
+        if (res.status !== 200) {
+          push(checks, tag, '허브 텔레메트리 큐', false, `HTTP ${res.status}`);
+          continue;
+        }
+        const body = res.data as { telemetryQueueLength?: number; workerRunning?: boolean };
+        const len = body.telemetryQueueLength ?? 0;
+        const ok = body.workerRunning !== false || len === 0;
+        push(
+          checks,
+          tag,
+          '허브 텔레메트리 큐',
+          ok,
+          `대기 ${len}건 · workerRunning=${String(body.workerRunning)}`,
+        );
+      } catch (e) {
+        push(checks, tag, '허브 텔레메트리 큐', false, e instanceof Error ? e.message : String(e));
+      }
+    }
+  }
   push(checks, 'cron', '스케줄러', true, '일간 리포트 0:00 · TTL 정리 1:00 (node-cron)');
 
   if (config.email.provider === 'smtp' && config.email.smtp?.host) {
     try {
+      const nodemailer = (await import('nodemailer')).default;
       const smtp = config.email.smtp;
       const transport = nodemailer.createTransport({
         host: smtp.host,

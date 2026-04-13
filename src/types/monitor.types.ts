@@ -97,8 +97,9 @@ export interface RedisInstanceConfig {
 
 export interface QueueConfig {
   serverId: string;
-  type: 'rabbitmq' | 'bull' | 'kafka';
+  type: 'rabbitmq' | 'bull' | 'kafka' | 'hub-telemetry';
   queueDepthThreshold?: number;
+  /** hub-telemetry: { url, token?, criticalDepth? } */
   connection?: Record<string, unknown>;
 }
 
