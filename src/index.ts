@@ -20,6 +20,7 @@ import { QueueCollector } from './collectors/queue.collector.js';
 import { FrontendCollector } from './collectors/frontend.collector.js';
 import type { BaseCollector } from './collectors/base.collector.js';
 import type { MonitorConfig } from './types/monitor.types.js';
+import { sendStartupReportIfConfigured } from './startup/startup-notify.js';
 
 function createCollectors(cfg: MonitorConfig): BaseCollector[] {
   return [
@@ -59,6 +60,12 @@ function main(): void {
   logger.info('daily digest monitor started', {
     collectors: collectors.map((c) => c.id),
     intervalMs: config.collectIntervalMs,
+  });
+
+  setImmediate(() => {
+    void sendStartupReportIfConfigured({ config, store, emailSender }).catch((e) =>
+      logger.error('startup report error', { error: String(e) }),
+    );
   });
 
   const shutdown = () => {

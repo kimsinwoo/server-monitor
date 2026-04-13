@@ -1,8 +1,15 @@
 /**
- * PM2로 모니터를 같은 실서버에서 상시 실행할 때 사용.
- * 사전: cd monitor && npm ci && npm run build
+ * PM2로 모니터를 허브와 동일 Ubuntu 서버에서 상시 실행.
+ *
+ * 사전
+ *   cp deploy/env.talktail-hub.example .env  # 필수 값 수정
+ *   mkdir -p logs /home/ubuntu/monitor-data
+ *   npm ci && npm run build
+ *
  * 실행: pm2 start deploy/ecosystem.monitor.cjs
  * 로그: monitor/logs/
+ *
+ * 환경 변수는 monitor/.env (index.ts 에서 dotenv 로드, cwd=monitor).
  */
 const path = require('path');
 
