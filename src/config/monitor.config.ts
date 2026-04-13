@@ -1,4 +1,10 @@
-import type { HttpEndpointConfig, MonitorConfig, ServerConfig } from '../types/monitor.types.js';
+import type {
+  DatabaseConfig,
+  HttpEndpointConfig,
+  MonitorConfig,
+  MqttBrokerConfig,
+  ServerConfig,
+} from '../types/monitor.types.js';
 import {
   CPU_CRITICAL_THRESHOLD,
   CPU_WARNING_THRESHOLD,
@@ -38,11 +44,18 @@ function httpEndpointKey(e: HttpEndpointConfig): string {
   return `${(e.method ?? 'GET').toUpperCase()}\t${e.url}`;
 }
 
-/** nginx(공인) + Node(로컬 upstream) 등 실제 허브 배포에 맞춘 기본 HTTP 검사 */
+/**
+ * nginx(공인 HTTPS) + Node(로컬 upstream) 등 허브 배포에 맞춘 기본 HTTP 검사.
+ * MONITOR_HUB_API_ORIGIN 이 비어 있으면 MONITOR_HUB_SITE_ORIGIN 과 동일 호스트로 /api/health 검사
+ * (HTTP 차단·HTTPS만 열린 경우 공인 도메인 한 번만 설정하면 됨).
+ */
 function buildHubDerivedHttpEndpoints(serverId: string): HttpEndpointConfig[] {
   const out: HttpEndpointConfig[] = [];
   const site = process.env.MONITOR_HUB_SITE_ORIGIN?.trim();
-  const api = process.env.MONITOR_HUB_API_ORIGIN?.trim();
+  const apiExplicit = process.env.MONITOR_HUB_API_ORIGIN?.trim();
+  const apiBase = apiExplicit || site;
+  const checkIndexHtml = process.env.MONITOR_HUB_CHECK_INDEX_HTML !== 'false';
+
   if (site) {
     const base = trimTrailingSlash(site);
     const timeoutMs = envInt('MONITOR_HUB_SITE_TIMEOUT_MS', 15_000);
@@ -55,17 +68,19 @@ function buildHubDerivedHttpEndpoints(serverId: string): HttpEndpointConfig[] {
       timeoutMs,
       slowThresholdMs,
     });
-    out.push({
-      serverId,
-      url: `${base}/index.html`,
-      method: 'GET',
-      expectedStatus: 200,
-      timeoutMs,
-      slowThresholdMs,
-    });
+    if (checkIndexHtml) {
+      out.push({
+        serverId,
+        url: `${base}/index.html`,
+        method: 'GET',
+        expectedStatus: 200,
+        timeoutMs,
+        slowThresholdMs,
+      });
+    }
   }
-  if (api) {
-    const base = trimTrailingSlash(api);
+  if (apiBase) {
+    const base = trimTrailingSlash(apiBase);
     out.push({
       serverId,
       url: `${base}/api/health`,
@@ -76,6 +91,40 @@ function buildHubDerivedHttpEndpoints(serverId: string): HttpEndpointConfig[] {
     });
   }
   return out;
+}
+
+/** hub_project/back/.env 와 동일 키를 monitor/.env 에 넣었을 때 MQTT 점검 자동 구성 */
+function buildMqttFromHubEnv(serverId: string): MqttBrokerConfig[] {
+  const url = process.env.MQTT_BROKER_URL?.trim();
+  if (!url) return [];
+  return [
+    {
+      serverId,
+      url,
+      username: process.env.MQTT_USERNAME?.trim() || undefined,
+      password: process.env.MQTT_PASSWORD || undefined,
+      clientId: process.env.MONITOR_MQTT_CLIENT_ID?.trim() || `monitor-${serverId}`,
+      heartbeatTimeoutMs: envInt('MONITOR_MQTT_CONNECT_TIMEOUT_MS', 10_000),
+    },
+  ];
+}
+
+/** hub_project/back config 와 동일 DB_* 키로 MySQL 점검 자동 구성 */
+function buildMysqlFromHubEnv(serverId: string): DatabaseConfig[] {
+  const host = process.env.DB_HOST?.trim();
+  if (!host) return [];
+  return [
+    {
+      serverId,
+      type: 'mysql',
+      host,
+      port: envInt('DB_PORT', 3306),
+      user: process.env.DB_USERNAME ?? 'root',
+      password: process.env.DB_PASSWORD ?? '',
+      database: process.env.DB_DATABASE ?? 'hubProjectDB',
+      slowQueryThresholdMs: envInt('MONITOR_DB_SLOW_MS', 800),
+    },
+  ];
 }
 
 function mergeHttpEndpoints(
@@ -114,15 +163,19 @@ export function loadMonitorConfig(): MonitorConfig {
   );
   const httpEndpoints = mergeHttpEndpoints(buildHubDerivedHttpEndpoints(serverId), fromEnvJson);
 
-  const mqttBrokers = parseJson(
+  const mqttFromJson = parseJson(
     process.env.MONITOR_MQTT_BROKERS,
     [] as MonitorConfig['mqtt']['brokers'],
   );
+  const mqttBrokers =
+    mqttFromJson.length > 0 ? mqttFromJson : buildMqttFromHubEnv(serverId);
 
-  const databases = parseJson(
+  const databasesFromJson = parseJson(
     process.env.MONITOR_DATABASES,
     [] as MonitorConfig['databases'],
   );
+  const databases =
+    databasesFromJson.length > 0 ? databasesFromJson : buildMysqlFromHubEnv(serverId);
 
   const redisInstances = parseJson(
     process.env.MONITOR_REDIS_INSTANCES,
