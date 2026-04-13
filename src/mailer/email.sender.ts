@@ -11,8 +11,8 @@ class SmtpEmailSender implements EmailSender {
   async send(payload: EmailPayload): Promise<void> {
     await this.transport.sendMail({
       from: this.from,
-      to: payload.to.join(', '),
-      cc: payload.cc?.join(', '),
+      to: payload.to.length === 1 ? payload.to[0]! : payload.to,
+      cc: payload.cc?.length ? (payload.cc.length === 1 ? payload.cc[0]! : payload.cc) : undefined,
       subject: payload.subject,
       html: payload.html,
       attachments: payload.attachments,

@@ -35,6 +35,15 @@ describe('loadMonitorConfig — 실서버(허브) 오리진 병합', () => {
     expect(urls).toContain('https://creamoff.example/api/health');
   });
 
+  it('EMAIL_RECIPIENTS 는 쉼표·세미콜론·줄바꿈으로 여러 주소를 받는다', () => {
+    vi.stubEnv('MONITOR_HUB_TELEMETRY_QUEUE', 'false');
+    vi.stubEnv('MQTT_BROKER_URL', '');
+    vi.stubEnv('DB_HOST', '');
+    vi.stubEnv('EMAIL_RECIPIENTS', 'a@x.com; b@y.com\na@x.com , c@z.com');
+    const c = loadMonitorConfig();
+    expect(c.email.recipients).toEqual(['a@x.com', 'b@y.com', 'c@z.com']);
+  });
+
   it('MONITOR_HTTP_ENDPOINTS 가 동일 URL이면 허브 기본값을 덮어쓴다', () => {
     vi.stubEnv('MONITOR_HUB_TELEMETRY_QUEUE', 'false');
     vi.stubEnv('MQTT_BROKER_URL', '');

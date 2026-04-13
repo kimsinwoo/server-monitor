@@ -30,6 +30,25 @@ function envList(key: string): string[] {
   return v.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+/** 쉼표·세미콜론·줄바꿈으로 여러 수신자 지정 (대소문자만 다른 중복 제거) */
+function envEmailRecipientsList(key: string): string[] {
+  const v = process.env[key];
+  if (!v) return [];
+  const parts = v
+    .split(/[,;\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const addr of parts) {
+    const norm = addr.toLowerCase();
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(addr);
+  }
+  return out;
+}
+
 function parseJson<T>(raw: string | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
@@ -361,7 +380,7 @@ export function loadMonitorConfig(): MonitorConfig {
     dns: { checks: dnsChecks },
     email: {
       provider: (process.env.EMAIL_PROVIDER as MonitorConfig['email']['provider']) ?? 'smtp',
-      recipients: envList('EMAIL_RECIPIENTS'),
+      recipients: envEmailRecipientsList('EMAIL_RECIPIENTS'),
       from: process.env.EMAIL_FROM ?? 'monitor@localhost',
       smtp: {
         host: process.env.SMTP_HOST ?? 'localhost',
