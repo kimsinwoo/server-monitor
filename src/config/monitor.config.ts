@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { parse as parseDotenv } from 'dotenv';
 import type {
   DatabaseConfig,
@@ -95,9 +96,46 @@ function buildHubDerivedHttpEndpoints(serverId: string): HttpEndpointConfig[] {
   return out;
 }
 
+/**
+ * MONITOR_HUB_ENV_PATH 가 없을 때, 일반적인 허브 배치 경로에서 back/.env 추론.
+ * (예: .../hub_project/front/dist + .../hub_project/back/logs/error.log)
+ */
+function inferHubBackEnvPathFromMonitorPaths(): string | undefined {
+  const seen = new Set<string>();
+
+  const tryPath = (candidate: string): string | undefined => {
+    const abs = path.resolve(candidate);
+    if (seen.has(abs)) return undefined;
+    seen.add(abs);
+    return fs.existsSync(abs) ? abs : undefined;
+  };
+
+  const fe = process.env.MONITOR_FRONTEND_BUILD_DIR?.trim();
+  if (fe) {
+    const norm = fe.replace(/\\/g, '/');
+    const m = norm.match(/^(.*)\/front\/dist\/?$/i);
+    if (m) {
+      const hit = tryPath(path.join(m[1]!, 'back', '.env'));
+      if (hit) return hit;
+    }
+  }
+
+  for (const log of envList('MONITOR_LOG_FILES')) {
+    const norm = log.replace(/\\/g, '/');
+    const m = norm.match(/^(.*?\/back)\/logs\//i);
+    if (m) {
+      const hit = tryPath(path.join(m[1]!, '.env'));
+      if (hit) return hit;
+    }
+  }
+
+  return undefined;
+}
+
 /** hub_project/back/.env 경로 — monitor 쪽 키가 비어 있을 때만 채움 (MQTT·DB) */
 function mergeHubBackEnvFile(): void {
-  const p = process.env.MONITOR_HUB_ENV_PATH?.trim();
+  let p = process.env.MONITOR_HUB_ENV_PATH?.trim();
+  if (!p) p = inferHubBackEnvPathFromMonitorPaths() ?? '';
   if (!p || !fs.existsSync(p)) return;
   try {
     const parsed = parseDotenv(fs.readFileSync(p, 'utf8'));
@@ -117,6 +155,15 @@ function mergeHubBackEnvFile(): void {
         process.env[k] = v;
       }
     }
+    // 허브 listen 포트 — 모니터 프로세스의 process.env.PORT 와 섞이지 않게 별도 키
+    const hubPort = parsed.PORT;
+    if (
+      hubPort !== undefined &&
+      String(hubPort).trim() !== '' &&
+      !String(process.env.MONITOR_HUB_BACK_PORT ?? '').trim()
+    ) {
+      process.env.MONITOR_HUB_BACK_PORT = String(hubPort).trim();
+    }
   } catch {
     /* ignore */
   }
@@ -127,9 +174,18 @@ function buildHubTelemetryQueueFromEnv(serverId: string): MonitorConfig['queues'
   if (process.env.MONITOR_HUB_TELEMETRY_QUEUE === 'false') return [];
   const explicit = process.env.MONITOR_HUB_QUEUE_METRICS_URL?.trim();
   const internal = process.env.MONITOR_HUB_INTERNAL_API_ORIGIN?.trim();
+  const hubBackPort = process.env.MONITOR_HUB_BACK_PORT?.trim();
+  const allowLocalQueue =
+    process.env.MONITOR_HUB_QUEUE_USE_LOCALHOST !== 'false' &&
+    process.env.MONITOR_HUB_PREFER_PUBLIC_QUEUE !== 'true';
+  const localhostHub =
+    allowLocalQueue && hubBackPort && /^\d+$/.test(hubBackPort)
+      ? `http://127.0.0.1:${hubBackPort}`
+      : '';
+  // 동일 머신: 공인 HTTPS(api/site)보다 127.0.0.1:PORT 우선(토큰 없이 동작). 원격 모니터는 MONITOR_HUB_QUEUE_USE_LOCALHOST=false
   const api = process.env.MONITOR_HUB_API_ORIGIN?.trim();
   const site = process.env.MONITOR_HUB_SITE_ORIGIN?.trim();
-  const base = internal || api || site;
+  const base = internal || localhostHub || api || site;
   const url =
     explicit || (base ? `${trimTrailingSlash(base)}/api/monitor/queue-metrics` : '');
   if (!url) return [];

@@ -8,6 +8,17 @@ type HubQueueMetrics = {
   workerRunning?: boolean;
 };
 
+/** URL 별 마지막 정상 스냅샷(info) 시각 — 일간 리포트에 큐 상태가 보이도록 과도한 적재는 피함 */
+const lastHubQueueInfoAtByUrl = new Map<string, number>();
+
+function hubQueueInfoIntervalMs(): number {
+  const raw = process.env.MONITOR_QUEUE_INFO_INTERVAL_MS;
+  if (raw === '0') return 0;
+  const n = Number.parseInt(raw ?? '', 10);
+  if (Number.isFinite(n) && n > 0) return n;
+  return 6 * 60 * 60 * 1000;
+}
+
 export class QueueCollector extends BaseCollector {
   readonly id = 'queue';
   readonly category: Category = 'queue';
@@ -102,6 +113,24 @@ export class QueueCollector extends BaseCollector {
           detail: { ...data, url: conn.url },
         });
         if (ev) events.push(ev);
+      } else {
+        const intervalMs = hubQueueInfoIntervalMs();
+        if (intervalMs > 0) {
+          const now = Date.now();
+          const prev = lastHubQueueInfoAtByUrl.get(conn.url) ?? 0;
+          if (now - prev >= intervalMs) {
+            lastHubQueueInfoAtByUrl.set(conn.url, now);
+            const ev = await this.evaluate(true, {
+              serverId,
+              category: 'queue',
+              severity: 'info',
+              title: '텔레메트리 큐 스냅샷',
+              message: `대기 ${len}건 · workerRunning=${String(data.workerRunning)}`,
+              detail: { ...data, url: conn.url },
+            });
+            if (ev) events.push(ev);
+          }
+        }
       }
     } catch (err) {
       const ev = await this.evaluate(true, {

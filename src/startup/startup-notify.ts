@@ -168,7 +168,10 @@ export async function runStartupAudit(config: MonitorConfig, store: EventStore):
     }
   }
   if (config.mqtt.brokers.length === 0) {
-    push(checks, 'mqtt-none', 'MQTT', true, '브로커 설정 없음');
+    const hubHint = process.env.MONITOR_HUB_SITE_ORIGIN?.trim()
+      ? ' · monitor 최신 빌드·재시작 후에도 동일하면 허브 back/.env 병합 확인(MONITOR_HUB_ENV_PATH 또는 front/dist·back/logs 경로 추론)'
+      : '';
+    push(checks, 'mqtt-none', 'MQTT', true, `브로커 설정 없음${hubHint}`);
   }
 
   if (config.redis.instances.length > 0) {
@@ -246,7 +249,10 @@ export async function runStartupAudit(config: MonitorConfig, store: EventStore):
     }
   }
   if (config.databases.length === 0) {
-    push(checks, 'db-none', '데이터베이스', true, '설정 없음');
+    const hubHint = process.env.MONITOR_HUB_SITE_ORIGIN?.trim()
+      ? ' · monitor 최신 빌드·재시작 후에도 동일하면 허브 back/.env 병합 확인(MONITOR_HUB_ENV_PATH 또는 front/dist·back/logs 경로 추론)'
+      : '';
+    push(checks, 'db-none', '데이터베이스', true, `설정 없음${hubHint}`);
   }
 
   for (let i = 0; i < config.dns.checks.length; i++) {
