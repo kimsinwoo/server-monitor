@@ -1,9 +1,13 @@
 import type { BaseCollector } from '../collectors/base.collector.js';
 import { EventStore } from './event.store.js';
+import type { InstantAlertDispatcher } from './instant-alert.dispatcher.js';
 import { logger } from '../utils/logger.js';
 
 export class EventAggregator {
-  constructor(private readonly store: EventStore) {}
+  constructor(
+    private readonly store: EventStore,
+    private readonly instantAlerts?: InstantAlertDispatcher,
+  ) {}
 
   async runCollector(collector: BaseCollector): Promise<void> {
     try {
@@ -13,6 +17,7 @@ export class EventAggregator {
       }
       if (events.length) {
         logger.info('collector events', { id: collector.id, count: events.length });
+        this.instantAlerts?.notifyNewEvents(events);
       }
     } catch (err) {
       logger.error('collector failed', { id: collector.id, error: String(err) });

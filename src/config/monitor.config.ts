@@ -7,6 +7,7 @@ import type {
   MonitorConfig,
   MqttBrokerConfig,
   ServerConfig,
+  Severity,
 } from '../types/monitor.types.js';
 import {
   CPU_CRITICAL_THRESHOLD,
@@ -22,6 +23,12 @@ function envInt(key: string, fallback: number): number {
   if (v === undefined || v === '') return fallback;
   const n = Number.parseInt(v, 10);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function parseSeverityEnv(key: string, fallback: Severity): Severity {
+  const raw = (process.env[key] ?? '').trim().toLowerCase();
+  if (raw === 'critical' || raw === 'error' || raw === 'warning' || raw === 'info') return raw;
+  return fallback;
 }
 
 function envList(key: string): string[] {
@@ -391,6 +398,13 @@ export function loadMonitorConfig(): MonitorConfig {
       sesRegion: process.env.AWS_SES_REGION,
       sendgridApiKey: process.env.SENDGRID_API_KEY,
       resendApiKey: process.env.RESEND_API_KEY,
+      instantAlerts: {
+        /** 기본 켜짐. 끄려면 MONITOR_INSTANT_ALERTS=false */
+        enabled: process.env.MONITOR_INSTANT_ALERTS !== 'false',
+        minSeverity: parseSeverityEnv('MONITOR_INSTANT_ALERT_MIN_SEVERITY', 'warning'),
+        cooldownMs: envInt('MONITOR_INSTANT_ALERT_COOLDOWN_MS', 600_000),
+        attachFullJson: process.env.MONITOR_INSTANT_ALERT_ATTACH_JSON !== 'false',
+      },
     },
     store: {
       type: (process.env.STORE_TYPE as MonitorConfig['store']['type']) ?? 'sqlite',

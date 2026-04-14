@@ -136,6 +136,16 @@ export interface MonitorConfig {
     sesRegion?: string;
     sendgridApiKey?: string;
     resendApiKey?: string;
+    /**
+     * 수집기가 이벤트를 저장할 때마다(일간 리포트와 별도) 즉시 메일 발송.
+     * 동일 제목·서버·카테고리는 cooldownMs 동안 한 번만 발송해 스팸을 줄임.
+     */
+    instantAlerts: {
+      enabled: boolean;
+      minSeverity: Severity;
+      cooldownMs: number;
+      attachFullJson: boolean;
+    };
   };
   store: {
     type: 'sqlite' | 'json' | 'redis';

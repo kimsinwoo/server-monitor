@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { loadMonitorConfig } from './config/monitor.config.js';
 import { EventStore } from './aggregator/event.store.js';
 import { EventAggregator } from './aggregator/event.aggregator.js';
+import { InstantAlertDispatcher } from './aggregator/instant-alert.dispatcher.js';
 import { ReportBuilder } from './report/report.builder.js';
 import { createEmailSender } from './mailer/email.sender.js';
 import { startCronSchedulers } from './scheduler/cron.scheduler.js';
@@ -66,9 +67,10 @@ async function createCollectors(cfg: MonitorConfig): Promise<BaseCollector[]> {
 async function main(): Promise<void> {
   const config = loadMonitorConfig();
   const store = new EventStore(config.store);
-  const aggregator = new EventAggregator(store);
-  const reportBuilder = new ReportBuilder();
   const emailSender = createEmailSender(config.email);
+  const instantAlerts = new InstantAlertDispatcher(config, emailSender);
+  const aggregator = new EventAggregator(store, instantAlerts);
+  const reportBuilder = new ReportBuilder();
 
   const collectors = await createCollectors(config);
   for (const c of collectors) {
@@ -84,6 +86,8 @@ async function main(): Promise<void> {
   logger.info('daily digest monitor started', {
     collectors: collectors.map((c) => c.id),
     intervalMs: config.collectIntervalMs,
+    instantAlerts: config.email.instantAlerts.enabled,
+    instantMinSeverity: config.email.instantAlerts.minSeverity,
   });
 
   setImmediate(() => {
