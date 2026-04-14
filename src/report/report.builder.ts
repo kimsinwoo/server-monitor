@@ -105,12 +105,56 @@ export class ReportBuilder {
     html = html.replace('{{ERROR_COUNT}}', String(counts.error));
     html = html.replace('{{WARNING_COUNT}}', String(counts.warning));
     html = html.replace('{{INFO_COUNT}}', String(counts.info));
+    html = html.replace('{{HUB_WATCH_DIGEST}}', this.renderHubWatchDigest(events));
     html = html.replace('{{EVENT_TABLES}}', this.renderEventTables(events));
     html = html.replace('{{CATEGORY_BREAKDOWN}}', this.renderCategoryBreakdown(summary));
     html = html.replace('{{RESOLVED_SECTION}}', this.renderResolvedSection(events));
     html = html.replace('{{ACTION_CHECKLIST}}', this.renderCriticalChecklist(events.filter((e) => e.severity === 'critical')));
 
     return html;
+  }
+
+  /** 허브 감시(텔레메트리 공백, state:hub 지연, LWT) — 일간 요약 전용 블록 */
+  private renderHubWatchDigest(events: MonitorEvent[]): string {
+    const hub = events.filter(
+      (e) => e.category === 'hub' && e.detail && (e.detail as { source?: string }).source === 'hub-watch',
+    );
+    if (hub.length === 0) {
+      return `<tr><td style="padding:0 48px 24px;">
+        <p style="margin:0;font-size:12px;color:#6e6e73;font-family:${FF};">해당 일자에 기록된 허브 감시 이벤트가 없습니다. (모니터가 <code style="font-size:11px;">/api/monitor/hub-watch</code>를 폴링하고 허브에서 사건이 적재된 경우에만 표시)</p>
+      </td></tr>`;
+    }
+    const byType: Record<string, number> = {};
+    for (const e of hub) {
+      const t = String((e.detail as { incidentType?: string }).incidentType ?? 'unknown');
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+    const typeLine = Object.entries(byType)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${this.escape(k)} ${n}건`)
+      .join(' · ');
+    const crit = hub.filter((e) => e.severity === 'critical').length;
+    const warn = hub.filter((e) => e.severity === 'warning').length;
+    const cards = hub
+      .slice(0, 25)
+      .map((e) => {
+        const d = e.detail as { hubId?: string; incidentType?: string };
+        const title = this.escape(e.title);
+        const msg = this.escape(this.truncate(e.message, 200));
+        const ts = this.escape(formatShortTime(e.timestamp));
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr><td style="background:#fafafa;border:1px solid #e8e8ed;border-radius:8px;padding:12px 14px;font-family:${FF};">
+          <p style="margin:0 0 4px;font-size:11px;color:#6e6e73;">${ts} · ${this.escape(String(d.hubId ?? ''))} · ${this.escape(String(d.incidentType ?? ''))}</p>
+          <p style="margin:0;font-size:13px;font-weight:600;color:#1d1d1f;">${title}</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#424245;line-height:1.5;">${msg}</p>
+        </td></tr></table>`;
+      })
+      .join('');
+    const more = hub.length > 25 ? `<p style="margin:8px 0 0;font-size:11px;color:#6e6e73;">외 ${hub.length - 25}건은 심각도별 이벤트 표에서 확인</p>` : '';
+    return `<tr><td style="padding:0 48px 8px;">
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.2px;text-transform:uppercase;font-family:${FF};">허브 감시 (텔레메트리 공백 · state:hub · LWT)</p>
+      <p style="margin:0 0 12px;font-size:12px;color:#1d1d1f;line-height:1.55;font-family:${FF};">요약: Critical ${crit}건 · Warning ${warn}건 · 유형별 ${typeLine}</p>
+      ${cards}${more}
+    </td></tr>`;
   }
 
   /** 심각도별 구분선 + 정렬된 4열(시각·서버·이벤트·지표) + 상세 블록 */

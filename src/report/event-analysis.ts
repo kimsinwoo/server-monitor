@@ -64,6 +64,17 @@ export function analyzeMonitorEvent(event: MonitorEvent): string {
     case 'frontend':
       add('프론트: 빌드 산출물·정적 경로·CSP·번들 크기·헬스 URL 응답을 확인하세요.');
       break;
+    case 'hub':
+      add(
+        '허브 감시: Talktail 허브 백엔드 /api/monitor/hub-watch 에서 수집된 사건입니다. 텔레메트리 공백은 측정 중 BLE·허브·브로커 경로를, state:hub 지연은 MQTT·펌웨어 응답을, LWT는 전원·네트워크 단절을 우선 의심하세요.',
+      );
+      if (d.incidentType === 'telemetry_gap')
+        add('텔레메트리 공백: detail.samples 에 분 단위 누적 스냅샷이 있습니다. 허브 로그·RF 환경·워커 큐를 확인하세요.');
+      if (d.incidentType === 'state_hub_timeout')
+        add('state:hub 무응답: 허브가 send 토픽에 상태를 올리지 못하는지, 브로커 ACL·토픽 모드(prod/test)를 확인하세요.');
+      if (d.incidentType === 'mqtt_lwt')
+        add('MQTT LWT: 펌웨어에서 Will topic/payload가 broker에 등록됐는지, 비정상 종료 시에만 발행되는지 확인하세요.');
+      break;
     default:
       add('커스텀 수집기: detail JSON의 필드 정의에 맞춰 담당 서비스 로그와 메트릭을 대조하세요.');
   }

@@ -229,6 +229,37 @@ function buildHubTelemetryQueueFromEnv(serverId: string): MonitorConfig['queues'
   ];
 }
 
+/** 허브 감시 API — queue-metrics 와 동일 베이스 URL 추론 가능 */
+function buildHubWatchFromEnv(): MonitorConfig['hubWatch'] {
+  const explicit = process.env.MONITOR_HUB_HUB_WATCH_URL?.trim();
+  const token = process.env.MONITOR_INTERNAL_TOKEN?.trim();
+  if (explicit) {
+    return { url: explicit, token };
+  }
+  const qUrl = process.env.MONITOR_HUB_QUEUE_METRICS_URL?.trim();
+  if (qUrl) {
+    const u = qUrl.replace(/\/api\/monitor\/queue-metrics\/?$/i, '/api/monitor/hub-watch');
+    return { url: u, token };
+  }
+  const internal = process.env.MONITOR_HUB_INTERNAL_API_ORIGIN?.trim();
+  const hubBackPort = process.env.MONITOR_HUB_BACK_PORT?.trim();
+  const allowLocal =
+    process.env.MONITOR_HUB_QUEUE_USE_LOCALHOST !== 'false' &&
+    process.env.MONITOR_HUB_PREFER_PUBLIC_QUEUE !== 'true';
+  const localhostHub =
+    allowLocal && hubBackPort && /^\d+$/.test(hubBackPort)
+      ? `http://127.0.0.1:${hubBackPort}`
+      : '';
+  const api = process.env.MONITOR_HUB_API_ORIGIN?.trim();
+  const site = process.env.MONITOR_HUB_SITE_ORIGIN?.trim();
+  const base = internal || localhostHub || api || site;
+  if (!base) return undefined;
+  return {
+    url: `${trimTrailingSlash(base)}/api/monitor/hub-watch`,
+    token,
+  };
+}
+
 /** hub_project/back/.env 와 동일 키를 monitor/.env 에 넣었을 때 MQTT 점검 자동 구성 */
 function buildMqttFromHubEnv(serverId: string): MqttBrokerConfig[] {
   const url = process.env.MQTT_BROKER_URL?.trim();
@@ -373,6 +404,7 @@ export function loadMonitorConfig(): MonitorConfig {
     },
     redis: { instances: redisInstances },
     queues,
+    hubWatch: buildHubWatchFromEnv(),
     logs: {
       files: envList('MONITOR_LOG_FILES'),
       patterns: envList('MONITOR_LOG_PATTERNS').length

@@ -13,6 +13,7 @@ export type Category =
   | 'redis'
   | 'queue'
   | 'frontend'
+  | 'hub'
   | 'custom';
 
 export interface SystemSnapshot {
@@ -125,6 +126,8 @@ export interface MonitorConfig {
   ssl: { domains: string[]; warningDaysAhead: number; criticalDaysAhead: number };
   redis: { instances: RedisInstanceConfig[] };
   queues: QueueConfig[];
+  /** 허브 /api/monitor/hub-watch 폴링(텔레메트리 공백, state:hub 지연, LWT) — 비우면 수집기 비활성 */
+  hubWatch?: { url: string; token?: string };
   logs: { files: string[]; patterns: string[]; errorRateThreshold?: number };
   frontend: { buildDir: string; healthUrls: string[]; bundleCompareDir?: string };
   dns: { checks: { serverId: string; hostname: string; expectedIps?: string[]; slowThresholdMs?: number }[] };

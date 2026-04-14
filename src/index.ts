@@ -56,6 +56,10 @@ async function createCollectors(cfg: MonitorConfig): Promise<BaseCollector[]> {
     const { QueueCollector } = await import('./collectors/queue.collector.js');
     list.push(new QueueCollector(cfg));
   }
+  if (cfg.hubWatch?.url) {
+    const { HubWatchCollector } = await import('./collectors/hub-watch.collector.js');
+    list.push(new HubWatchCollector(cfg));
+  }
   if (cfg.frontend.buildDir || cfg.frontend.healthUrls.length > 0) {
     const { FrontendCollector } = await import('./collectors/frontend.collector.js');
     list.push(new FrontendCollector(cfg));
