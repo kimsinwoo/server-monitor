@@ -2,41 +2,159 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>서버 일간 리포트</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Server Daily Report</title>
 </head>
-<body style="margin:0;padding:16px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;">
+<body style="margin:0;padding:0;background-color:#f5f5f7;-webkit-font-smoothing:antialiased;">
+
+  <!-- Preheader -->
+  <div style="display:none;max-height:0;overflow:hidden;font-size:1px;color:#f5f5f7;line-height:1px;">{{SUMMARY_LINE}} · {{DATE_RANGE}}</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f7;">
     <tr>
-      <td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
-        <h1 style="margin:0;font-size:18px;color:#111827;">서버 일간 리포트</h1>
-        <p style="margin:8px 0 0;font-size:13px;color:#6b7280;">{{DATE_RANGE}}</p>
-        <p style="margin:8px 0 0;font-size:13px;color:#374151;"><strong>요약:</strong> {{SUMMARY_LINE}}</p>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:16px 24px;">
-        <h2 style="margin:0 0 12px;font-size:15px;color:#111827;">심각도별 이벤트</h2>
-        {{EVENT_TABLES}}
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:16px 24px;border-top:1px solid #e5e7eb;">
-        <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">카테고리 분포</h2>
-        <p style="margin:0;font-size:13px;color:#374151;">{{CATEGORY_STATS}}</p>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:16px 24px;border-top:1px solid #e5e7eb;">
-        <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">자동 복구</h2>
-        {{RESOLVED_SECTION}}
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:16px 24px;border-top:1px solid #e5e7eb;background:#fafafa;">
-        <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">권장 조치</h2>
-        {{ACTION_CHECKLIST}}
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background-color:#ffffff;">
+
+          <!-- TOP ACCENT LINE -->
+          <tr>
+            <td style="height:3px;background-color:#1d1d1f;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+
+          <!-- HEADER -->
+          <tr>
+            <td style="padding:40px 48px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 10px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.4px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Server Operations</p>
+                    <h1 style="margin:0 0 6px;font-size:28px;font-weight:700;color:#1d1d1f;letter-spacing:-0.5px;line-height:1.2;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">일간 리포트</h1>
+                    <p style="margin:0;font-size:13px;color:#6e6e73;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{DATE_RANGE}}</p>
+                  </td>
+                  <td align="right" valign="top">{{HEADER_BADGE}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- SUMMARY LINE -->
+          <tr>
+            <td style="padding:0 48px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background-color:#f5f5f7;padding:16px 20px;">
+                    <p style="margin:0;font-size:13px;color:#1d1d1f;line-height:1.7;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{SUMMARY_LINE}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- DIVIDER -->
+          <tr><td style="height:1px;background-color:#e8e8ed;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+          <!-- METRIC STRIP -->
+          <tr>
+            <td style="padding:32px 48px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="25%" style="text-align:center;border-right:1px solid #e8e8ed;vertical-align:top;">
+                    <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#ff3b30;letter-spacing:-1px;line-height:1.1;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{CRITICAL_COUNT}}</p>
+                    <p style="margin:0;font-size:10px;font-weight:500;color:#6e6e73;letter-spacing:0.6px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Critical</p>
+                  </td>
+                  <td width="25%" style="text-align:center;border-right:1px solid #e8e8ed;vertical-align:top;">
+                    <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#e03636;letter-spacing:-1px;line-height:1.1;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{ERROR_COUNT}}</p>
+                    <p style="margin:0;font-size:10px;font-weight:500;color:#6e6e73;letter-spacing:0.6px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Error</p>
+                  </td>
+                  <td width="25%" style="text-align:center;border-right:1px solid #e8e8ed;vertical-align:top;">
+                    <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#ff9500;letter-spacing:-1px;line-height:1.1;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{WARNING_COUNT}}</p>
+                    <p style="margin:0;font-size:10px;font-weight:500;color:#6e6e73;letter-spacing:0.6px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Warning</p>
+                  </td>
+                  <td width="25%" style="text-align:center;vertical-align:top;">
+                    <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#0071e3;letter-spacing:-1px;line-height:1.1;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">{{INFO_COUNT}}</p>
+                    <p style="margin:0;font-size:10px;font-weight:500;color:#6e6e73;letter-spacing:0.6px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">Info</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- DIVIDER -->
+          <tr><td style="height:1px;background-color:#e8e8ed;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+          <!-- EVENTS -->
+          <tr>
+            <td style="padding:32px 48px 0;">
+              <p style="margin:0 0 20px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.4px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">심각도별 이벤트</p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">
+                <colgroup>
+                  <col style="width:19%;" />
+                  <col style="width:24%;" />
+                  <col style="width:49%;" />
+                  <col style="width:8%;" />
+                </colgroup>
+                <!-- Column headers (열 너비는 본문 행과 동일) -->
+                <tr>
+                  <td width="19%" style="padding:0 8px 10px 0;font-size:11px;color:#aeaeb2;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;vertical-align:bottom;">시각</td>
+                  <td width="24%" style="padding:0 8px 10px 0;font-size:11px;color:#aeaeb2;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;vertical-align:bottom;">서버</td>
+                  <td width="49%" style="padding:0 8px 10px 0;font-size:11px;color:#aeaeb2;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;vertical-align:bottom;">이벤트</td>
+                  <td width="8%" style="padding:0 0 10px 8px;font-size:11px;color:#aeaeb2;text-align:right;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;vertical-align:bottom;">지표</td>
+                </tr>
+                {{EVENT_TABLES}}
+              </table>
+            </td>
+          </tr>
+
+          <!-- CATEGORY STATS -->
+          <tr>
+            <td style="padding:32px 48px 0;">
+              <p style="margin:0 0 20px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.4px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">카테고리 분포</p>
+
+              {{CATEGORY_BREAKDOWN}}
+            </td>
+          </tr>
+
+          <!-- DIVIDER -->
+          <tr><td style="height:1px;background-color:#e8e8ed;font-size:0;line-height:0;margin-top:32px;">&nbsp;</td></tr>
+
+          <!-- AUTO-RECOVERY -->
+          <tr>
+            <td style="padding:32px 48px 0;">
+              <p style="margin:0 0 20px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.4px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">자동 복구</p>
+
+              {{RESOLVED_SECTION}}
+            </td>
+          </tr>
+
+          <!-- DIVIDER -->
+          <tr><td style="height:1px;background-color:#e8e8ed;font-size:0;line-height:0;margin-top:32px;">&nbsp;</td></tr>
+
+          <!-- ACTION CHECKLIST -->
+          <tr>
+            <td style="padding:32px 48px 40px;">
+              <p style="margin:0 0 20px;font-size:11px;font-weight:600;color:#6e6e73;letter-spacing:1.4px;text-transform:uppercase;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">권장 조치</p>
+
+              {{ACTION_CHECKLIST}}
+            </td>
+          </tr>
+
+          <!-- BOTTOM RULE -->
+          <tr><td style="height:1px;background-color:#e8e8ed;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="padding:24px 48px;text-align:center;">
+              <p style="margin:0 0 4px;font-size:11px;color:#aeaeb2;line-height:1.6;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">이 메일은 모니터링 시스템에 의해 자동 발송되었습니다.</p>
+              <p style="margin:0;font-size:11px;color:#aeaeb2;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;">
+                문의 <a href="mailto:ops@example.com" style="color:#0071e3;text-decoration:none;">ops@example.com</a>&nbsp;·&nbsp;<a href="#" style="color:#0071e3;text-decoration:none;">수신 설정</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
       </td>
     </tr>
   </table>
+
 </body>
 </html>

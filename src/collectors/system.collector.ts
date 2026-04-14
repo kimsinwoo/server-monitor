@@ -52,13 +52,27 @@ export class SystemCollector extends BaseCollector {
       },
     );
 
+    const ramBasis =
+      snapshot.ramMethod === 'linux_proc_memavailable'
+        ? 'MemAvailable(/proc/meminfo)'
+        : snapshot.ramMethod === 'darwin_vmstat'
+          ? 'vm_stat(wired+active+compressor)'
+          : 'systeminformation';
+
     push(snapshot.ramUsedPercent >= thresholds.ram.critical, {
       serverId: this.config.servers[0]?.id ?? 'server-01',
       category: 'system',
       severity: 'critical',
       title: '메모리 사용률 위험',
-      message: `RAM ${snapshot.ramUsedPercent.toFixed(1)}% 사용`,
-      detail: { ramUsedPercent: snapshot.ramUsedPercent },
+      message: `RAM ${snapshot.ramUsedPercent.toFixed(1)}% (${snapshot.ramUsedMB.toFixed(0)} / ${snapshot.ramTotalMB.toFixed(0)} MB, 가용 약 ${snapshot.ramAvailableMB?.toFixed(0) ?? '—'} MB) · 임계 ${thresholds.ram.critical}% · 기준 ${ramBasis}`,
+      detail: {
+        ramUsedPercent: snapshot.ramUsedPercent,
+        ramUsedMB: snapshot.ramUsedMB,
+        ramTotalMB: snapshot.ramTotalMB,
+        ramAvailableMB: snapshot.ramAvailableMB,
+        ramMethod: snapshot.ramMethod,
+        thresholdCriticalPercent: thresholds.ram.critical,
+      },
     });
 
     push(
@@ -68,8 +82,15 @@ export class SystemCollector extends BaseCollector {
         category: 'system',
         severity: 'warning',
         title: '메모리 사용률 경고',
-        message: `RAM ${snapshot.ramUsedPercent.toFixed(1)}% 사용`,
-        detail: { ramUsedPercent: snapshot.ramUsedPercent },
+        message: `RAM ${snapshot.ramUsedPercent.toFixed(1)}% (${snapshot.ramUsedMB.toFixed(0)} / ${snapshot.ramTotalMB.toFixed(0)} MB, 가용 약 ${snapshot.ramAvailableMB?.toFixed(0) ?? '—'} MB) · 경고 ${thresholds.ram.warning}% · 기준 ${ramBasis}`,
+        detail: {
+          ramUsedPercent: snapshot.ramUsedPercent,
+          ramUsedMB: snapshot.ramUsedMB,
+          ramTotalMB: snapshot.ramTotalMB,
+          ramAvailableMB: snapshot.ramAvailableMB,
+          ramMethod: snapshot.ramMethod,
+          thresholdWarningPercent: thresholds.ram.warning,
+        },
       },
     );
 

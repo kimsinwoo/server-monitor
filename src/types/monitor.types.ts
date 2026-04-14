@@ -20,6 +20,10 @@ export interface SystemSnapshot {
   ramUsedPercent: number;
   ramUsedMB: number;
   ramTotalMB: number;
+  /** 추정 가용 RAM(MB). 알림·리포트에서 산출 근거 확인용 */
+  ramAvailableMB?: number;
+  /** RAM% 산출 경로(플랫폼별 신뢰 가능한 소스 우선) */
+  ramMethod?: 'linux_proc_memavailable' | 'darwin_vmstat' | 'systeminformation';
   diskUsedPercent: number;
   diskUsedGB: number;
   diskTotalGB: number;
