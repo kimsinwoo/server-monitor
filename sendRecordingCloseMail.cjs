@@ -119,14 +119,13 @@ async function sendRecordingCloseMail(p) {
 }
 
 /**
- * 측정 중 연결 끊김·무음 등 즉시 알림 (lost_signal 직후, 텔레메트리 무음 등).
- * MONITOR_RECORDING_CLOSE_MAIL / MONITOR_MEASURING_INTERRUPT_MAIL 로 끌 수 있음 (recordingInterruptMail.js).
+ * 비정상: 측정·녹음 진행 중 연결 끊김 (lost_signal, 목록 제거, 텔레메트리 무음, LWT 등).
+ * MONITOR_MEASURING_INTERRUPT_MAIL=0|false 로 끔.
  */
 async function sendMeasuringInterruptMail(p) {
-  const off = process.env.MONITOR_RECORDING_CLOSE_MAIL;
-  if (off === '0' || off === 'false') return;
   const ioff = process.env.MONITOR_MEASURING_INTERRUPT_MAIL;
   if (ioff === '0' || ioff === 'false') return;
+  if (p.classification === 'normal') return;
 
   const nm = loadNodemailer();
   const built = buildTransporter(nm);
@@ -160,21 +159,29 @@ async function sendMeasuringInterruptMail(p) {
     '',
     logBlock,
     '',
+    '판단: 비정상 (측정 중이거나 녹음(recording)이 열린 상태에서 연결이 끊김)',
+    '',
     `trigger: ${trigger || ''}`,
     detail ? `detail: ${detail}` : '',
   ]
     .filter((x) => x !== '')
     .join('\n');
 
-  const subject = `[Talktail Hub] 측정 중 연결 끊김 (즉시) | ${trigger || 'interrupt'} | ${hubMac}`;
+  const subject = `[Talktail Hub] 비정상: 측정·연결 끊김 | ${trigger || 'interrupt'} | ${hubMac}`;
   const from = process.env.MONITOR_MAIL_FROM || user;
 
-  await transporter.sendMail({
-    from,
-    to: recipients.join(', '),
-    subject,
-    text,
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to: recipients.join(', '),
+      subject,
+      text,
+    });
+    console.log('[monitor/sendMeasuringInterruptMail] OK', subject);
+  } catch (e) {
+    console.error('[monitor/sendMeasuringInterruptMail] sendMail failed:', e?.message || e);
+    throw e;
+  }
 }
 
 module.exports = { sendRecordingCloseMail, sendMeasuringInterruptMail };
