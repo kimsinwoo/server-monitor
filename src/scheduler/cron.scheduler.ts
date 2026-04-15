@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
 import type { MonitorConfig } from '../types/monitor.types.js';
 import type { EventStore } from '../aggregator/event.store.js';
 import { ReportBuilder, getSeveritySummaryLine } from '../report/report.builder.js';
@@ -12,11 +13,14 @@ export function startCronSchedulers(deps: {
   store: EventStore;
   reportBuilder: ReportBuilder;
   emailSender: EmailSender;
-}): void {
+}): { stop: () => void } {
   const { config, store, reportBuilder, emailSender } = deps;
   const tz = config.timezone;
 
-  cron.schedule(
+  const tasks: ScheduledTask[] = [];
+
+  tasks.push(
+    cron.schedule(
     '0 0 * * *',
     async () => {
       const yesterday = getYesterdayDateString(tz);
@@ -38,10 +42,12 @@ export function startCronSchedulers(deps: {
       }
     },
     { timezone: tz },
+    ),
   );
 
-  cron.schedule(
-    '0 1 * * *',
+  tasks.push(
+    cron.schedule(
+      '0 1 * * *',
     () => {
       try {
         store.purgeOlderThanDays(config.store.ttlDays);
@@ -51,7 +57,20 @@ export function startCronSchedulers(deps: {
       }
     },
     { timezone: tz },
+    ),
   );
 
   logger.info('cron schedulers started', { timezone: tz });
+
+  return {
+    stop: () => {
+      for (const t of tasks) {
+        try {
+          t.stop();
+        } catch (err) {
+          logger.warn('cron task stop', { err: String(err) });
+        }
+      }
+    },
+  };
 }

@@ -11,12 +11,39 @@ function cooldownKey(e: MonitorEvent): string {
 }
 
 export class InstantAlertDispatcher {
+  private static readonly MAX_COOLDOWN_ENTRIES = 5000;
+  /** 키별 마지막 발송 시각이 이 시간보다 오래되면 제거 (Map 무한 증가 방지) */
+  private static readonly COOLDOWN_ENTRY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
   private readonly lastSentMs = new Map<string, number>();
 
   constructor(
     private readonly config: MonitorConfig,
     private readonly emailSender: EmailSender,
   ) {}
+
+  /** 오래된 쿨다운 키 제거 + 상한 초과 시 가장 오래된 항목부터 삭제 */
+  private pruneCooldownMap(now: number, cooldownMs: number): void {
+    const maxAge = Math.max(
+      InstantAlertDispatcher.COOLDOWN_ENTRY_MAX_AGE_MS,
+      cooldownMs * 200,
+    );
+    for (const [k, t] of this.lastSentMs) {
+      if (now - t > maxAge) this.lastSentMs.delete(k);
+    }
+    while (this.lastSentMs.size > InstantAlertDispatcher.MAX_COOLDOWN_ENTRIES) {
+      let oldestKey: string | null = null;
+      let oldestT = Infinity;
+      for (const [k, t] of this.lastSentMs) {
+        if (t < oldestT) {
+          oldestT = t;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey === null) break;
+      this.lastSentMs.delete(oldestKey);
+    }
+  }
 
   /** 수집기 루프를 막지 않도록 비동기로 처리 */
   notifyNewEvents(events: MonitorEvent[]): void {
@@ -38,11 +65,13 @@ export class InstantAlertDispatcher {
       return;
     }
 
+    const now = Date.now();
+    this.pruneCooldownMap(now, ia.cooldownMs);
+
     for (const e of events) {
       if (!meetsMinSeverity(e.severity, ia.minSeverity)) continue;
 
       const key = cooldownKey(e);
-      const now = Date.now();
       const prev = this.lastSentMs.get(key) ?? 0;
       if (now - prev < ia.cooldownMs) {
         continue;

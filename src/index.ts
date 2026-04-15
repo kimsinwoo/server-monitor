@@ -77,15 +77,16 @@ async function main(): Promise<void> {
   const reportBuilder = new ReportBuilder();
 
   const collectors = await createCollectors(config);
+  const collectorIntervals: ReturnType<typeof setInterval>[] = [];
   for (const c of collectors) {
     const tick = () => {
       void aggregator.runCollector(c);
     };
     tick();
-    setInterval(tick, c.intervalMs);
+    collectorIntervals.push(setInterval(tick, c.intervalMs));
   }
 
-  startCronSchedulers({ config, store, reportBuilder, emailSender });
+  const cronCtl = startCronSchedulers({ config, store, reportBuilder, emailSender });
 
   logger.info('daily digest monitor started', {
     collectors: collectors.map((c) => c.id),
@@ -103,6 +104,10 @@ async function main(): Promise<void> {
   });
 
   const shutdown = () => {
+    for (const id of collectorIntervals) {
+      clearInterval(id);
+    }
+    cronCtl.stop();
     store.close();
     process.exit(0);
   };
