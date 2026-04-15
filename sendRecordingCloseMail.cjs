@@ -118,4 +118,63 @@ async function sendRecordingCloseMail(p) {
   });
 }
 
-module.exports = { sendRecordingCloseMail };
+/**
+ * 측정 중 연결 끊김·무음 등 즉시 알림 (lost_signal 직후, 텔레메트리 무음 등).
+ * MONITOR_RECORDING_CLOSE_MAIL / MONITOR_MEASURING_INTERRUPT_MAIL 로 끌 수 있음 (recordingInterruptMail.js).
+ */
+async function sendMeasuringInterruptMail(p) {
+  const off = process.env.MONITOR_RECORDING_CLOSE_MAIL;
+  if (off === '0' || off === 'false') return;
+  const ioff = process.env.MONITOR_MEASURING_INTERRUPT_MAIL;
+  if (ioff === '0' || ioff === 'false') return;
+
+  const nm = loadNodemailer();
+  const built = buildTransporter(nm);
+  if (built.error) {
+    console.warn('[monitor/sendMeasuringInterruptMail]', built.error);
+    return;
+  }
+  const { transporter, user } = built;
+
+  const toRaw = process.env.MONITOR_RECORDING_CLOSE_TO || process.env.NOTIFY_EMAIL;
+  const recipients = String(toRaw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!recipients.length) {
+    console.warn('[monitor/sendMeasuringInterruptMail] 수신자 없음');
+    return;
+  }
+
+  const { ownerEmail, hubMac, deviceMac, trigger, detail, mqttLogLines } = p;
+  const line1 = ownerEmail;
+  const line2 = `${hubMac}\t${deviceMac}`;
+  const logBlock =
+    Array.isArray(mqttLogLines) && mqttLogLines.length
+      ? mqttLogLines.join('\n\n')
+      : '(최근 hub → receive MQTT 발행 로그 없음)';
+
+  const text = [
+    line1,
+    line2,
+    '',
+    logBlock,
+    '',
+    `trigger: ${trigger || ''}`,
+    detail ? `detail: ${detail}` : '',
+  ]
+    .filter((x) => x !== '')
+    .join('\n');
+
+  const subject = `[Talktail Hub] 측정 중 연결 끊김 (즉시) | ${trigger || 'interrupt'} | ${hubMac}`;
+  const from = process.env.MONITOR_MAIL_FROM || user;
+
+  await transporter.sendMail({
+    from,
+    to: recipients.join(', '),
+    subject,
+    text,
+  });
+}
+
+module.exports = { sendRecordingCloseMail, sendMeasuringInterruptMail };
