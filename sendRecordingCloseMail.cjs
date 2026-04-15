@@ -10,6 +10,15 @@
  * - MONITOR_SMTP_HOST / MONITOR_SMTP_PORT: 설정 시 해당 호스트로 전송
  * - MONITOR_SMTP_SERVICE: 기본 gmail (호스트 미설정 시)
  * - MONITOR_SMTP_USER / MONITOR_SMTP_PASS: 없으면 NOTIFY_EMAIL / NOTIFY_EMAIL_PASS
+ * - MONITOR_MAIL_ON_NORMAL_CLOSE: 허브 recordingStorage 쪽 — lost_signal 후 close에도 요약 메일(1|true)
+ * - MONITOR_MEASURING_INTERRUPT_MAIL: 0|false 이면 sendMeasuringInterruptMail 비활성
+ *
+ * (참고 표 — hub .env.example 에도 동일 요약)
+ * MONITOR_RECORDING_CLOSE_MAIL     (없음)   0|false = recording close 메일 전체 비활성
+ * MONITOR_MAIL_ON_NORMAL_CLOSE     (없음)   1|true = lost_signal 후 close(정상 흐름)도 close 메일
+ * MONITOR_SEND_MAIL_CJS            (없음)   sendRecordingCloseMail.cjs 절대/상대 경로(우선)
+ * MONITOR_MAIL_PACKAGE_DIR         (없음)   패키지 디렉터리명(server-monitor|monitor)
+ * MONITOR_MEASURING_INTERRUPT_MAIL (없음)   0|false = 측정 중 끊김 메일 비활성
  */
 
 const path = require('path');
@@ -66,6 +75,7 @@ function buildTransporter(nm) {
  *   closeReason: string,
  *   mqttLogLines: string[],
  * }} p
+ * p.normalTermination: true = lost_signal 수신 후 recording close(시스템 정상 흐름), false = lost_signal 없이 close
  */
 async function sendRecordingCloseMail(p) {
   const off = process.env.MONITOR_RECORDING_CLOSE_MAIL;
@@ -110,12 +120,18 @@ async function sendRecordingCloseMail(p) {
   const subject = `[Talktail Hub] 녹음 ${normalTermination ? '정상' : '비정상'} 종료 | ${hubMac} | ${deviceMac}`;
   const from = process.env.MONITOR_MAIL_FROM || user;
 
-  await transporter.sendMail({
-    from,
-    to: recipients.join(', '),
-    subject,
-    text,
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to: recipients.join(', '),
+      subject,
+      text,
+    });
+    console.log('[monitor/sendRecordingCloseMail] OK', subject);
+  } catch (e) {
+    console.error('[monitor/sendRecordingCloseMail] sendMail failed:', e?.message || e);
+    throw e;
+  }
 }
 
 /**
