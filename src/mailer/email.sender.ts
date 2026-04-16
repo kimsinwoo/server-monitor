@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import type { EmailPayload, EmailSender, MonitorConfig } from '../types/monitor.types.js';
+import { formatUnknownError } from '../utils/error-serialize.js';
 import { logger } from '../utils/logger.js';
 
 class SmtpEmailSender implements EmailSender {
@@ -73,7 +74,7 @@ export async function sendWithBackoff(sender: EmailSender, payload: EmailPayload
       return;
     } catch (err) {
       lastErr = err;
-      logger.error('email send failed', { attempt: attempt + 1, error: String(err) });
+      logger.error('email send failed', { attempt: attempt + 1, error: formatUnknownError(err) });
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

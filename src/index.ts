@@ -7,6 +7,7 @@ import { ReportBuilder } from './report/report.builder.js';
 import { createEmailSender } from './mailer/email.sender.js';
 import { startCronSchedulers } from './scheduler/cron.scheduler.js';
 import { logger } from './utils/logger.js';
+import { formatUnknownError } from './utils/error-serialize.js';
 import { SystemCollector } from './collectors/system.collector.js';
 import { HttpCollector } from './collectors/http.collector.js';
 import type { BaseCollector } from './collectors/base.collector.js';
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
       .then(({ sendStartupReportIfConfigured }) =>
         sendStartupReportIfConfigured({ config, store, emailSender }),
       )
-      .catch((e) => logger.error('startup report error', { error: String(e) }));
+      .catch((e) => logger.error('startup report error', { error: formatUnknownError(e) }));
   });
 
   const shutdown = () => {
@@ -116,6 +117,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-  logger.error('fatal', { error: String(e) });
+  logger.error('fatal', { error: formatUnknownError(e) });
   process.exit(1);
 });

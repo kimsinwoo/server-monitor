@@ -9,6 +9,8 @@ import type { MonitorConfig } from '../types/monitor.types.js';
 import type { EmailSender } from '../types/monitor.types.js';
 import type { EventStore } from '../aggregator/event.store.js';
 import { captureSystemSnapshot } from '../utils/system-snapshot.js';
+import { formatUnknownError } from '../utils/error-serialize.js';
+import { injectPdfChromeStyles, renderHtmlToPdf } from '../mailer/html-to-pdf.js';
 import { logger } from '../utils/logger.js';
 
 export type StartupCheck = {
@@ -424,6 +426,38 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+export function buildCompactStartupEmailHtml(checks: StartupCheck[], startedAtIso: string): string {
+  const failed = checks.filter((c) => !c.ok).length;
+  const ok = checks.length - failed;
+  const summary =
+    failed === 0
+      ? `전체 ${checks.length}항목 정상`
+      : `정상 ${ok} / 이상 ${failed} (첨부·PDF에 전체 상세·SMTP 응답 등 확인)`;
+
+  const failedRows = checks
+    .filter((c) => !c.ok)
+    .map((c) => {
+      const shortDetail = c.detail.length > 200 ? `${c.detail.slice(0, 200)}…` : c.detail;
+      return `<tr style="background:#fee2e2;color:#991b1b;"><td style="padding:8px;font-size:13px;font-family:Arial,Helvetica,sans-serif;">${escapeHtml(c.label)}</td><td style="padding:8px;font-size:12px;font-family:Arial,Helvetica,sans-serif;">${escapeHtml(shortDetail)}</td></tr>`;
+    })
+    .join('');
+
+  return `<!DOCTYPE html><html><body style="margin:0;padding:16px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" style="max-width:640px;margin:0 auto;background:#fff;border-radius:8px;" cellpadding="0" cellspacing="0" width="100%">
+<tr><td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
+<h1 style="margin:0;font-size:18px;color:#111827;">일간 모니터 기동 (요약)</h1>
+<p style="margin:8px 0 0;font-size:13px;color:#6b7280;">시각: ${escapeHtml(startedAtIso)}</p>
+<p style="margin:8px 0 0;font-size:14px;color:#374151;"><strong>요약:</strong> ${escapeHtml(summary)}</p>
+<p style="margin:12px 0 0;padding:12px;background:#eff6ff;border-radius:8px;font-size:13px;color:#1e40af;line-height:1.55;">
+  전체 점검 표·실패 항목의 <strong>전체 메시지</strong>는 첨부 <strong>PDF</strong>와 (이상이 있을 때) <strong>텍스트(.txt)</strong>를 확인하세요.
+</p>
+</td></tr>
+<tr><td style="padding:16px 24px;">
+${failed ? `<p style="margin:0 0 8px;font-size:13px;color:#991b1b;font-weight:600;">실패 항목 미리보기</p><table width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">${failedRows}</table>` : `<p style="margin:0;font-size:13px;color:#065f46;">점검 이상 없음.</p>`}
+</td></tr>
+</table></body></html>`;
+}
+
 export function buildStartupEmailHtml(checks: StartupCheck[], startedAtIso: string): string {
   const failed = checks.filter((c) => !c.ok).length;
   const ok = checks.length - failed;
@@ -480,7 +514,7 @@ export async function sendStartupReportIfConfigured(params: {
   try {
     checks = await runStartupAudit(config, store);
   } catch (e) {
-    logger.error('startup audit failed', { error: String(e) });
+    logger.error('startup audit failed', { error: formatUnknownError(e) });
     checks = [
       {
         id: 'audit-fatal',
@@ -491,17 +525,39 @@ export async function sendStartupReportIfConfigured(params: {
     ];
   }
 
-  const html = buildStartupEmailHtml(checks, startedAt);
+  const fullHtml = buildStartupEmailHtml(checks, startedAt);
   const failed = checks.filter((c) => !c.ok).length;
+
+  const attachments: { filename: string; content: Buffer }[] = [];
+  if (failed > 0) {
+    const lines = checks
+      .filter((c) => !c.ok)
+      .map((c) => `=== ${c.label} (id=${c.id}) ===\n${c.detail}\n`);
+    attachments.push({
+      filename: 'monitor-startup-check-failures.txt',
+      content: Buffer.from(lines.join('\n'), 'utf8'),
+    });
+  }
+
+  const pdfBuf = await renderHtmlToPdf(injectPdfChromeStyles(fullHtml));
+  if (pdfBuf) {
+    attachments.push({
+      filename: `monitor-startup-${startedAt.slice(0, 10)}.pdf`,
+      content: pdfBuf,
+    });
+  }
+
+  const html = pdfBuf ? buildCompactStartupEmailHtml(checks, startedAt) : fullHtml;
 
   try {
     await emailSender.send({
       to: config.email.recipients,
       subject: `[일간 모니터] 기동 완료 · 점검 ${failed === 0 ? '전체 정상' : `이상 ${failed}건`} (${os.hostname()})`,
       html,
+      attachments: attachments.length ? attachments : undefined,
     });
     logger.info('startup notification email sent', { recipients: config.email.recipients.length });
   } catch (e) {
-    logger.error('startup notification email failed', { error: String(e) });
+    logger.error('startup notification email failed', { error: formatUnknownError(e) });
   }
 }

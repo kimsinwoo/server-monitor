@@ -1,6 +1,7 @@
 import type { MonitorConfig, MonitorEvent } from '../types/monitor.types.js';
 import type { EmailSender } from '../types/monitor.types.js';
 import { sendWithBackoff } from '../mailer/email.sender.js';
+import { formatUnknownError } from '../utils/error-serialize.js';
 import { analyzeMonitorEvent, meetsMinSeverity } from '../report/event-analysis.js';
 import { buildInstantAlertPayload } from '../report/instant-alert.builder.js';
 import { logger } from '../utils/logger.js';
@@ -51,7 +52,7 @@ export class InstantAlertDispatcher {
     const ia = this.config.email.instantAlerts;
     if (!ia?.enabled) return;
     void this.run(events, ia).catch((err) => {
-      logger.error('instant alert batch failed', { error: String(err) });
+      logger.error('instant alert batch failed', { error: formatUnknownError(err) });
     });
   }
 
@@ -80,12 +81,12 @@ export class InstantAlertDispatcher {
       this.lastSentMs.set(key, now);
       try {
         const analysis = analyzeMonitorEvent(e);
-        const payload = buildInstantAlertPayload(e, analysis, ia.attachFullJson, recipients);
+        const payload = await buildInstantAlertPayload(e, analysis, ia.attachFullJson, recipients);
         await sendWithBackoff(this.emailSender, payload);
         logger.info('instant alert email sent', { eventId: e.id, severity: e.severity, category: e.category });
       } catch (err) {
         this.lastSentMs.delete(key);
-        logger.error('instant alert send failed', { eventId: e.id, error: String(err) });
+        logger.error('instant alert send failed', { eventId: e.id, error: formatUnknownError(err) });
       }
     }
   }
